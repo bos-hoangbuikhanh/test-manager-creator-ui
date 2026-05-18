@@ -42,7 +42,7 @@ const Config = (() => {
    */
   function save(cfg) {
     _sessionPassword = cfg.password || '';
-    const { password, ...safe } = cfg; // eslint-disable-line no-unused-vars
+    const { password, ...safe } = cfg;
     localStorage.setItem(KEY, JSON.stringify(safe));
   }
 
