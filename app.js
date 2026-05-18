@@ -1301,22 +1301,6 @@ const Content = (() => {
     });
   }
 
-  /** Parse steps from Codebeamer field response */
-  function parseStepsFromField(field) {
-    if (!field || !field.value) return [];
-    const rows = field.value.rows || [];
-    return rows.map(row => {
-      const cells = row.cells || [];
-      const getCell = (id) => cells.find(c => c.fieldId === id)?.value;
-      return {
-        action:          getCell(1000001) || '',
-        expected_result: getCell(1000002) || '',
-        critical:        !!getCell(1000003),
-        uuid:            getCell(1000004) || '',
-      };
-    });
-  }
-
   /* ── helpers ─────────────────────────────────────────────── */
   function show(id, animClass) {
     const el = document.getElementById(id);
@@ -1373,10 +1357,31 @@ function generateUUID() {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
   }
-  // RFC 4122 v4 fallback
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-    const r = (crypto.getRandomValues(new Uint8Array(1))[0] & 0xff) % 16;
-    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  // RFC 4122 v4 fallback — generate all 16 random bytes in a single call
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
+  bytes[8] = (bytes[8] & 0x3f) | 0x80; // variant bits
+  const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+}
+
+/**
+ * Parse test steps from a Codebeamer field-value response.
+ * Field ID 1000000 (Test Steps table) with column IDs:
+ *   1000001 — Action, 1000002 — Expected Result, 1000003 — Critical, 1000004 — UUID
+ */
+function parseStepsFromField(field) {
+  if (!field || !field.value) return [];
+  const rows = field.value.rows || [];
+  return rows.map(row => {
+    const cells = row.cells || [];
+    const getCell = (id) => cells.find(c => c.fieldId === id)?.value;
+    return {
+      action:          getCell(1000001) || '',
+      expected_result: getCell(1000002) || '',
+      critical:        !!getCell(1000003),
+      uuid:            getCell(1000004) || '',
+    };
   });
 }
 
@@ -1513,22 +1518,6 @@ const App = (() => {
       }
     }
     Editor.openEdit(full);
-  }
-
-  /* ── This is a local helper since parseStepsFromField is scoped in Content ── */
-  function parseStepsFromField(field) {
-    if (!field || !field.value) return [];
-    const rows = field.value.rows || [];
-    return rows.map(row => {
-      const cells = row.cells || [];
-      const getCell = (id) => cells.find(c => c.fieldId === id)?.value;
-      return {
-        action:          getCell(1000001) || '',
-        expected_result: getCell(1000002) || '',
-        critical:        !!getCell(1000003),
-        uuid:            getCell(1000004) || '',
-      };
-    });
   }
 
   /* ── Theme toggle ────────────────────────────────────────── */
