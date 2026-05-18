@@ -10,8 +10,11 @@ const BROWSE_BASE = "http://192.128.10.230:11000";
 // Base URL for the create-testcase API.
 // Use relative path when served through the FastAPI backend; fall back to
 // localhost:5000 when the file is opened directly from disk.
+const CREATE_PORT = 5000;
 const CREATE_BASE =
-  location.protocol === "file:" ? "http://localhost:5000" : "";
+  location.protocol === "file:" ? `http://localhost:${CREATE_PORT}` : "";
+
+const MAX_STEPS = 100;
 
 const CB_ISSUE_URL = (id) => `http://cb.corp.bos-semi.com/cb/issue/${id}`;
 
@@ -307,7 +310,7 @@ function showCreateForm(parentNode) {
       <div class="form-group steps-header-row">
         <label>Test Steps <span class="required">*</span></label>
         <div class="steps-count-row">
-          <input type="number" id="cf_num_steps" class="form-input num-input" min="1" max="100" value="1" />
+          <input type="number" id="cf_num_steps" class="form-input num-input" min="1" max="${MAX_STEPS}" value="1" />
           <button type="button" class="btn-outline" id="cf_gen_steps">Generate Rows</button>
         </div>
       </div>
@@ -327,7 +330,7 @@ function showCreateForm(parentNode) {
   const stepsDiv = document.getElementById("cf_steps");
 
   function generateStepRows() {
-    const n = Math.max(1, Math.min(100, parseInt(document.getElementById("cf_num_steps").value, 10) || 1));
+    const n = Math.max(1, Math.min(MAX_STEPS, parseInt(document.getElementById("cf_num_steps").value, 10) || 1));
     stepsDiv.innerHTML = "";
     const frag = document.createDocumentFragment();
     for (let i = 0; i < n; i++) frag.appendChild(buildStepRow(i));

@@ -140,7 +140,9 @@ def update_testcase_steps(
 # --------------------------------------------------------------------------- #
 app = FastAPI(title="Codebeamer Testcase Creator")
 
-# Allow the standalone index.html (file:// or any origin) to call this API.
+# Allow the standalone index.html (file:// or any origin) to reach this API.
+# Requests to sensitive endpoints are authenticated via CB credentials in the
+# request body, so broad CORS access is acceptable for this internal tool.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
