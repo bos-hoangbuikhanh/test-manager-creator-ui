@@ -1,0 +1,28 @@
+body {
+  background-color: #f5f7fa;
+}
+
+.step-row {
+  border: 1px solid #dee2e6;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+  background-color: #fff;
+}
+
+.step-row .step-index {
+  font-weight: 600;
+  color: #0d6efd;
+  margin-bottom: 0.5rem;
+}
+
+#result-success a {
+  word-break: break-all;
+}
+
+#res-error-msg {
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #842029;
+  margin: 0;
+}
