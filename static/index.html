@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Codebeamer Testcase Creator</title>
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <nav class="navbar navbar-dark bg-dark">
+    <div class="container">
+      <span class="navbar-brand mb-0 h1">Codebeamer Testcase Creator</span>
+    </div>
+  </nav>
+
+  <main class="container py-4">
+    <form id="tc-form" class="card shadow-sm">
+      <div class="card-body">
+        <h5 class="card-title mb-3">Create a new testcase</h5>
+
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label for="username" class="form-label">Codebeamer Username</label>
+            <input type="text" class="form-control" id="username" required autocomplete="username" />
+          </div>
+          <div class="col-md-6">
+            <label for="password" class="form-label">Codebeamer Password</label>
+            <input type="password" class="form-control" id="password" required autocomplete="current-password" />
+          </div>
+
+          <div class="col-md-4">
+            <label for="parent_id" class="form-label">Parent Item ID</label>
+            <input type="number" class="form-control" id="parent_id" required min="1" />
+          </div>
+          <div class="col-md-8">
+            <label for="testcase_name" class="form-label">Testcase Name</label>
+            <input type="text" class="form-control" id="testcase_name" required />
+          </div>
+
+          <div class="col-12">
+            <label for="description" class="form-label">Description</label>
+            <textarea class="form-control" id="description" rows="2"></textarea>
+          </div>
+
+          <div class="col-md-4">
+            <label for="num_steps" class="form-label">Number of Steps</label>
+            <div class="input-group">
+              <input type="number" class="form-control" id="num_steps" min="1" max="100" value="1" />
+              <button type="button" class="btn btn-outline-primary" id="btn-generate-steps">
+                Generate Step Rows
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <hr class="my-4" />
+
+        <h6 class="mb-3">Test Steps</h6>
+        <div id="steps-container"></div>
+
+        <div class="d-flex gap-2 mt-4">
+          <button type="submit" class="btn btn-primary" id="btn-submit">
+            <span
+              class="spinner-border spinner-border-sm me-2 d-none"
+              id="submit-spinner"
+              role="status"
+              aria-hidden="true"
+            ></span>
+            <span id="submit-label">Submit / Create Testcase</span>
+          </button>
+          <button type="button" class="btn btn-secondary" id="btn-reset">Reset</button>
+        </div>
+      </div>
+    </form>
+
+    <div id="result-success" class="card border-success mt-4 d-none">
+      <div class="card-body">
+        <h5 class="card-title text-success">Testcase created successfully</h5>
+        <p class="mb-1"><strong>Testcase ID:</strong> <span id="res-tc-id"></span></p>
+        <p class="mb-1"><strong>Testcase Name:</strong> <span id="res-tc-name"></span></p>
+        <p class="mb-1">
+          <strong>Parent URL:</strong>
+          <a id="res-parent-url" href="#" target="_blank" rel="noopener"></a>
+        </p>
+        <p class="mb-0">
+          <strong>Testcase URL:</strong>
+          <a id="res-tc-url" href="#" target="_blank" rel="noopener"></a>
+        </p>
+      </div>
+    </div>
+
+    <div id="result-error" class="card border-danger mt-4 d-none">
+      <div class="card-body">
+        <h5 class="card-title text-danger">Error</h5>
+        <pre class="mb-0" id="res-error-msg"></pre>
+      </div>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.1/lib/anime.min.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
