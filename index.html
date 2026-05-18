@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Codebeamer Test Manager</title>
+
+  <!-- Bootstrap 5 CSS -->
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+    integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
+    crossorigin="anonymous"
+  />
+  <!-- Bootstrap Icons -->
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+    integrity="sha384-tViUnnbplMdV8hCP1I91xWELB2H5PURnbIIXGKpFFHnfVhCSTa6+kXO8nGkjGkjJ"
+    crossorigin="anonymous"
+  />
+  <!-- Custom styles -->
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- ============================================================
+     TOP NAVBAR
+     ============================================================ -->
+<nav class="navbar navbar-expand-lg fixed-top cb-navbar" id="mainNavbar">
+  <div class="container-fluid px-3">
+    <!-- Brand -->
+    <a class="navbar-brand d-flex align-items-center gap-2" href="#">
+      <span class="cb-logo-icon">
+        <i class="bi bi-clipboard2-check-fill fs-5"></i>
+      </span>
+      <span class="fw-semibold">Codebeamer <span class="text-cb-accent">Test Manager</span></span>
+    </a>
+
+    <!-- Center: search -->
+    <div class="d-none d-md-flex flex-grow-1 mx-4" style="max-width:400px;">
+      <div class="input-group input-group-sm cb-search-group">
+        <span class="input-group-text border-0 bg-transparent">
+          <i class="bi bi-search text-muted"></i>
+        </span>
+        <input
+          type="text"
+          class="form-control border-0 bg-transparent"
+          id="globalSearch"
+          placeholder="Search items, trackers, projects…"
+          autocomplete="off"
+        />
+      </div>
+    </div>
+
+    <!-- Right controls -->
+    <div class="d-flex align-items-center gap-2 ms-auto">
+      <!-- Connection config -->
+      <button class="btn btn-sm cb-btn-ghost" id="btnConfig" title="API Configuration">
+        <i class="bi bi-gear"></i>
+      </button>
+      <!-- Dark / Light toggle -->
+      <button class="btn btn-sm cb-btn-ghost" id="btnThemeToggle" title="Toggle theme">
+        <i class="bi bi-moon-stars-fill" id="themeIcon"></i>
+      </button>
+      <!-- Log panel toggle -->
+      <button class="btn btn-sm cb-btn-ghost" id="btnLogToggle" title="Toggle API log panel">
+        <i class="bi bi-terminal-fill"></i>
+      </button>
+    </div>
+  </div>
+</nav>
+
+<!-- ============================================================
+     TOAST CONTAINER
+     ============================================================ -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3" id="toastContainer" style="z-index:1100;"></div>
+
+<!-- ============================================================
+     CONFIG MODAL
+     ============================================================ -->
+<div class="modal fade" id="configModal" tabindex="-1" aria-labelledby="configModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content cb-modal">
+      <div class="modal-header border-0">
+        <h5 class="modal-title" id="configModalLabel">
+          <i class="bi bi-gear me-2 text-cb-accent"></i>API Configuration
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label small fw-semibold">Codebeamer Base URL</label>
+          <input type="url" class="form-control cb-input" id="cfgBaseUrl"
+            placeholder="https://codebeamer.example.com/cb" />
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-semibold">Username</label>
+          <input type="text" class="form-control cb-input" id="cfgUsername" placeholder="username" />
+        </div>
+        <div class="mb-3">
+          <label class="form-label small fw-semibold">Password / Token</label>
+          <input type="password" class="form-control cb-input" id="cfgPassword" placeholder="••••••••" />
+        </div>
+      </div>
+      <div class="modal-footer border-0">
+        <button class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-sm cb-btn-primary" id="btnSaveConfig">Save Configuration</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     CREATE / EDIT TESTCASE MODAL
+     ============================================================ -->
+<div class="modal fade" id="testcaseModal" tabindex="-1" aria-labelledby="testcaseModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content cb-modal">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title" id="testcaseModalLabel">
+          <i class="bi bi-file-earmark-plus me-2 text-cb-accent" id="modalIcon"></i>
+          <span id="modalTitle">Create Testcase</span>
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+
+      <!-- Progress bar (visible during save) -->
+      <div class="px-3 pt-2" id="modalProgress" style="display:none;">
+        <div class="progress" style="height:3px;">
+          <div class="progress-bar progress-bar-striped progress-bar-animated bg-cb-accent w-100"
+            role="progressbar" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100"
+            aria-label="Saving in progress"></div>
+        </div>
+      </div>
+
+      <div class="modal-body pt-2">
+        <!-- Hidden fields -->
+        <input type="hidden" id="tcMode" value="create" />
+        <input type="hidden" id="tcParentId" value="" />
+        <input type="hidden" id="tcId" value="" />
+
+        <!-- Name & Description -->
+        <div class="row g-3 mb-3">
+          <div class="col-md-7">
+            <label class="form-label small fw-semibold">Testcase Name <span class="text-danger">*</span></label>
+            <input type="text" class="form-control cb-input" id="tcName" placeholder="e.g. TC_SECURE_BOOT_22" />
+          </div>
+          <div class="col-md-5">
+            <label class="form-label small fw-semibold">Parent Item ID</label>
+            <input type="text" class="form-control cb-input" id="tcParentIdDisplay" readonly />
+          </div>
+          <div class="col-12">
+            <label class="form-label small fw-semibold">Description</label>
+            <textarea class="form-control cb-input" id="tcDescription" rows="2"
+              placeholder="Optional description…"></textarea>
+          </div>
+        </div>
+
+        <!-- Test Steps -->
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <h6 class="mb-0 fw-semibold">
+            <i class="bi bi-list-ol me-1 text-cb-accent"></i>Test Steps
+          </h6>
+          <button class="btn btn-sm cb-btn-primary" id="btnAddStep">
+            <i class="bi bi-plus-lg me-1"></i>Add Step
+          </button>
+        </div>
+
+        <div class="table-responsive cb-steps-wrapper">
+          <table class="table cb-steps-table align-middle mb-0">
+            <thead>
+              <tr>
+                <th style="width:40px;">#</th>
+                <th>Action</th>
+                <th>Expected Result</th>
+                <th style="width:80px;" class="text-center">Critical</th>
+                <th style="width:80px;" class="text-center">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="stepsTableBody">
+              <!-- rows injected by JS -->
+            </tbody>
+          </table>
+        </div>
+
+        <div class="text-center py-3" id="stepsEmptyHint" style="display:none;">
+          <i class="bi bi-clipboard2-x fs-2 text-muted"></i>
+          <p class="text-muted small mt-1 mb-0">No steps yet. Click <strong>Add Step</strong> to begin.</p>
+        </div>
+      </div>
+
+      <div class="modal-footer border-0 pt-0">
+        <button class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-sm cb-btn-primary" id="btnSaveTestcase">
+          <i class="bi bi-floppy me-1"></i>Save Testcase
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     MAIN APP LAYOUT
+     ============================================================ -->
+<div class="cb-app-shell" id="appShell">
+
+  <!-- LEFT SIDEBAR -->
+  <aside class="cb-sidebar" id="sidebar">
+    <div class="cb-sidebar-header d-flex align-items-center gap-2 px-3 py-2">
+      <span class="text-muted small fw-semibold text-uppercase ls-wide">Explorer</span>
+      <button class="btn btn-sm cb-btn-ghost ms-auto" id="btnRefreshTree" title="Refresh tree">
+        <i class="bi bi-arrow-clockwise"></i>
+      </button>
+    </div>
+
+    <!-- Sidebar search -->
+    <div class="px-3 pb-2">
+      <div class="input-group input-group-sm cb-sidebar-search">
+        <span class="input-group-text border-0 bg-transparent"><i class="bi bi-search text-muted small"></i></span>
+        <input type="text" class="form-control border-0 bg-transparent small"
+          id="sidebarSearch" placeholder="Filter…" autocomplete="off" />
+      </div>
+    </div>
+
+    <!-- Tree -->
+    <div class="cb-tree-container px-1" id="treeContainer">
+      <!-- skeleton on load -->
+      <div id="treeSkeleton">
+        <div class="cb-skeleton-line" style="width:80%;margin-left:8px;"></div>
+        <div class="cb-skeleton-line" style="width:60%;margin-left:28px;"></div>
+        <div class="cb-skeleton-line" style="width:70%;margin-left:28px;"></div>
+        <div class="cb-skeleton-line" style="width:55%;margin-left:48px;"></div>
+        <div class="cb-skeleton-line" style="width:65%;margin-left:8px;"></div>
+      </div>
+      <ul class="cb-tree-root list-unstyled mb-0" id="projectTree" style="display:none;"></ul>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main class="cb-main" id="mainContent">
+    <!-- Welcome / empty state -->
+    <div class="cb-empty-state h-100 d-flex flex-column align-items-center justify-content-center" id="emptyState">
+      <div class="cb-hero-icon mb-3">
+        <i class="bi bi-diagram-3-fill" style="font-size:3rem;"></i>
+      </div>
+      <h4 class="fw-semibold mb-1">Codebeamer Test Manager</h4>
+      <p class="text-muted text-center" style="max-width:340px;">
+        Select a project, tracker, or testcase in the left panel to get started.
+        Configure your API connection using the <i class="bi bi-gear"></i> icon.
+      </p>
+      <button class="btn cb-btn-primary mt-2" id="btnConfigFromEmpty">
+        <i class="bi bi-gear me-1"></i>Configure API
+      </button>
+    </div>
+
+    <!-- Requirement / parent item view -->
+    <div class="cb-content-panel" id="parentItemPanel" style="display:none;">
+      <div class="cb-panel-header d-flex align-items-start gap-3 mb-4">
+        <div class="cb-type-badge cb-type-req">
+          <i class="bi bi-box-arrow-in-right"></i>
+        </div>
+        <div class="flex-grow-1">
+          <h5 class="mb-0 fw-semibold" id="parentItemName">—</h5>
+          <div class="d-flex gap-3 mt-1 flex-wrap">
+            <span class="text-muted small">
+              <i class="bi bi-hash me-1"></i><span id="parentItemId">—</span>
+            </span>
+            <a class="text-cb-accent small text-decoration-none" id="parentItemUrl" href="#" target="_blank">
+              <i class="bi bi-box-arrow-up-right me-1"></i>Open in Codebeamer
+            </a>
+          </div>
+        </div>
+        <button class="btn cb-btn-primary" id="btnCreateTestcase">
+          <i class="bi bi-plus-circle me-1"></i>Create Testcase
+        </button>
+      </div>
+
+      <!-- Children testcases list -->
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <h6 class="mb-0 fw-semibold text-muted text-uppercase small ls-wide">
+          <i class="bi bi-list-check me-1"></i>Child Testcases
+        </h6>
+        <span class="badge cb-badge-count" id="childCount">0</span>
+      </div>
+      <div id="childTestcasesList" class="cb-children-list">
+        <div class="text-center py-4 text-muted small" id="childrenEmpty">
+          No testcases under this item yet.
+        </div>
+      </div>
+    </div>
+
+    <!-- Testcase editor view -->
+    <div class="cb-content-panel" id="testcasePanel" style="display:none;">
+      <div class="cb-panel-header d-flex align-items-start gap-3 mb-4">
+        <div class="cb-type-badge cb-type-tc">
+          <i class="bi bi-clipboard2-check"></i>
+        </div>
+        <div class="flex-grow-1">
+          <h5 class="mb-0 fw-semibold" id="tcViewName">—</h5>
+          <div class="d-flex gap-3 mt-1 flex-wrap">
+            <span class="text-muted small">
+              <i class="bi bi-hash me-1"></i><span id="tcViewId">—</span>
+            </span>
+            <a class="text-cb-accent small text-decoration-none" id="tcViewUrl" href="#" target="_blank">
+              <i class="bi bi-box-arrow-up-right me-1"></i>Open in Codebeamer
+            </a>
+          </div>
+        </div>
+        <button class="btn cb-btn-primary" id="btnEditTestcase">
+          <i class="bi bi-pencil me-1"></i>Edit Steps
+        </button>
+      </div>
+
+      <!-- Steps summary -->
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <h6 class="mb-0 fw-semibold text-muted text-uppercase small ls-wide">
+          <i class="bi bi-list-ol me-1"></i>Test Steps
+        </h6>
+        <span class="badge cb-badge-count" id="tcStepCount">0</span>
+      </div>
+
+      <div id="tcStepsView" class="cb-steps-view">
+        <div class="text-center py-4" id="stepsLoading" style="display:none;">
+          <div class="spinner-border spinner-border-sm text-cb-accent me-2"></div>
+          <span class="text-muted small">Loading steps…</span>
+        </div>
+        <div class="text-center py-4 text-muted small" id="stepsViewEmpty" style="display:none;">
+          No test steps defined.
+        </div>
+        <div id="stepsViewContent"></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- RIGHT LOG PANEL -->
+  <aside class="cb-log-panel" id="logPanel">
+    <div class="cb-log-header d-flex align-items-center gap-2 px-3 py-2">
+      <i class="bi bi-terminal-fill text-cb-accent small"></i>
+      <span class="text-muted small fw-semibold text-uppercase ls-wide">API Log</span>
+      <div class="ms-auto d-flex gap-1">
+        <button class="btn btn-sm cb-btn-ghost" id="btnClearLog" title="Clear log">
+          <i class="bi bi-trash3 small"></i>
+        </button>
+        <button class="btn btn-sm cb-btn-ghost" id="btnCopyLog" title="Copy log">
+          <i class="bi bi-clipboard small"></i>
+        </button>
+      </div>
+    </div>
+    <div class="cb-log-body" id="logBody">
+      <div class="cb-log-entry cb-log-info">
+        <span class="cb-log-ts">—</span>
+        <span class="cb-log-label label-info">INFO</span>
+        <span>Application started. Configure API to begin.</span>
+      </div>
+    </div>
+  </aside>
+
+</div><!-- /.cb-app-shell -->
+
+<!-- ============================================================
+     SCRIPTS
+     ============================================================ -->
+<!-- Bootstrap 5 JS -->
+<script
+  src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+  integrity="sha384-YvpcrYf0tY3lHB60NNkmXc4s9bIOgUxi8T/jzmEqfBBcBzI1o/mTB+6gBvZG7Ar9"
+  crossorigin="anonymous"
+></script>
+<!-- anime.js -->
+<script
+  src="https://cdnjs.cloudflare.com/ajax/libs/animejs/3.2.2/anime.min.js"
+  integrity="sha512-E7V0Z/s2Ox2b2DZbby+3OeA2pH7RmErqNWDGIg5C9WXr5KkgV9DBhwg1mx+jHhKAuQzTBGghk3nIV6AmC5r9pA=="
+  crossorigin="anonymous"
+  referrerpolicy="no-referrer"
+></script>
+<!-- App -->
+<script src="app.js"></script>
+</body>
+</html>
