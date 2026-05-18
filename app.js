@@ -17,20 +17,33 @@
 
 /* ================================================================
    CONFIG
+   Password is held only in memory (never written to localStorage)
+   to avoid clear-text credential storage in the browser.
    ================================================================ */
 const Config = (() => {
   const KEY = 'cb_config';
 
+  // In-memory password — cleared when the page is unloaded.
+  let _sessionPassword = '';
+
   function load() {
     try {
-      return JSON.parse(localStorage.getItem(KEY)) || {};
+      const stored = JSON.parse(localStorage.getItem(KEY)) || {};
+      // Re-attach in-memory password so callers see a complete object.
+      return { ...stored, password: _sessionPassword };
     } catch {
-      return {};
+      return { password: _sessionPassword };
     }
   }
 
+  /**
+   * Persist only non-sensitive fields. The password is stored in memory
+   * only for the lifetime of the page session.
+   */
   function save(cfg) {
-    localStorage.setItem(KEY, JSON.stringify(cfg));
+    _sessionPassword = cfg.password || '';
+    const { password, ...safe } = cfg; // eslint-disable-line no-unused-vars
+    localStorage.setItem(KEY, JSON.stringify(safe));
   }
 
   function get() {
@@ -43,7 +56,7 @@ const Config = (() => {
 
   function headers() {
     const cfg = load();
-    const creds = btoa(`${cfg.username || ''}:${cfg.password || ''}`);
+    const creds = btoa(`${cfg.username || ''}:${_sessionPassword}`);
     return {
       'Content-Type': 'application/json',
       'Authorization': `Basic ${creds}`,
@@ -205,9 +218,10 @@ const Api = (() => {
       throw err;
     }
 
-    // 429 — rate-limited, retry with back-off
+    // 429 — rate-limited, respect Retry-After header or use exponential back-off
     if (res.status === 429 && retryCount < MAX_RETRIES) {
-      const wait = RETRY_DELAY * Math.pow(2, retryCount);
+      const retryAfter = res.headers.get('Retry-After');
+      const wait = retryAfter ? parseInt(retryAfter, 10) * 1000 : RETRY_DELAY * Math.pow(2, retryCount);
       Log.warn(`429 Too Many Requests — retrying in ${wait}ms (attempt ${retryCount + 1})`);
       await sleep(wait);
       return request(method, path, body, retryCount + 1);
@@ -216,7 +230,8 @@ const Api = (() => {
     let data;
     try {
       data = await res.json();
-    } catch {
+    } catch (parseErr) {
+      Log.warn(`Response body could not be parsed as JSON: ${parseErr.message}`);
       data = null;
     }
 
@@ -1355,8 +1370,12 @@ function escapeHtml(str) {
 }
 
 function generateUUID() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  // RFC 4122 v4 fallback
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-    const r = (Math.random() * 16) | 0;
+    const r = (crypto.getRandomValues(new Uint8Array(1))[0] & 0xff) % 16;
     return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
   });
 }
