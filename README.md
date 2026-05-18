@@ -13,7 +13,7 @@ This project is a static frontend (HTML/CSS/JavaScript) and does not require bui
 ### Option 2: Serve with a local HTTP server (recommended)
 
 ```bash
-cd /path/to/test-manager-creator-ui
+cd test-manager-creator-ui
 python3 -m http.server 8000
 ```
 
