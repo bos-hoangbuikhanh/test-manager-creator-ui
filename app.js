@@ -1,203 +1,174 @@
-/* =========================================================
-   Codebeamer Test Manager - simple tree UI
-   ========================================================= */
+"use strict";
 
-const API_BASE = "http://192.128.10.230:11000";
-const CB_ITEM_URL = (id) => `http://cb.corp.bos-semi.com/cb/issue/${id}`;
+// ============================================================
+// CONFIG
+// ============================================================
 
-const ICONS = {
-  project: "📁",
-  tracker: "📘",
-  item: "📄",
-  testcase: "✅",
-};
+// Base URL for tree-browsing endpoints (/cb/projects, /cb/trackers/…, etc.)
+const BROWSE_BASE = "http://192.128.10.230:11000";
 
-// Currently selected node info (used by toolbar buttons + refresh)
-let selected = null;
+// Base URL for the create-testcase API.
+// Use relative path when served through the FastAPI backend; fall back to
+// localhost:5000 when the file is opened directly from disk.
+const CREATE_PORT = 5000;
+const CREATE_BASE =
+  location.protocol === "file:" ? `http://localhost:${CREATE_PORT}` : "";
 
-// -----------------------------
-// API helpers
-// -----------------------------
-async function apiGet(path) {
-  const url = `${API_BASE}${path}`;
-  const res = await fetch(url);
+const MAX_STEPS = 100;
+
+const CB_ISSUE_URL = (id) => `http://cb.corp.bos-semi.com/cb/issue/${id}`;
+
+const KIND_ICON  = { project: "📁", tracker: "📘", item: "📄", testcase: "✅" };
+const KIND_LABEL = { project: "Project", tracker: "Tracker", item: "Item", testcase: "Testcase" };
+
+// ============================================================
+// CREDENTIALS (stored in memory for the session)
+// ============================================================
+const inputUser = document.getElementById("inputUser");
+const inputPass = document.getElementById("inputPass");
+
+function getCreds() {
+  return { username: inputUser.value.trim(), password: inputPass.value };
+}
+
+// ============================================================
+// UTILITIES
+// ============================================================
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+}
+
+// ============================================================
+// BROWSE API
+// ============================================================
+async function browseGet(path) {
+  const res = await fetch(`${BROWSE_BASE}${path}`);
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-  const data = await res.json();
-  return { url, data };
+  return res.json();
 }
 
-const api = {
-  listProjects: () => apiGet(`/cb/projects`),
-  listTrackers: (projectId) => apiGet(`/cb/projects/list-trackers?project_id=${projectId}`),
-  listTrackerChildren: (trackerId) => apiGet(`/cb/trackers/list-children?tracker_id=${trackerId}`),
-  listItemChildren: (itemId) => apiGet(`/cb/items/children-items-in-item?item_id=${itemId}`),
-  getItemFields: (itemId) => apiGet(`/cb/items/fields?item_id=${itemId}`),
+const browseApi = {
+  projects:       ()    => browseGet("/cb/projects"),
+  trackers:       (pid) => browseGet(`/cb/projects/list-trackers?project_id=${pid}`),
+  trackerChildren:(tid) => browseGet(`/cb/trackers/list-children?tracker_id=${tid}`),
+  itemChildren:   (iid) => browseGet(`/cb/items/children-items-in-item?item_id=${iid}`),
+  itemFields:     (iid) => browseGet(`/cb/items/fields?item_id=${iid}`),
 };
 
-// -----------------------------
-// Stub APIs (to be implemented later)
-// -----------------------------
-async function createTestcase(parentId, testcaseName, description) {
-  // TODO: call backend API to create testcase
-  console.log("TODO create testcase", { parentId, testcaseName, description });
+// ============================================================
+// NODE NORMALIZATION
+// ============================================================
+function pickId(raw) {
+  return raw.id ?? raw.itemId ?? raw.trackerId ?? raw.projectId ?? "";
 }
-
-async function linkTestcaseToParent(parentId, testcaseId) {
-  // TODO: call backend API to link testcase under parent
-  console.log("TODO link testcase", { parentId, testcaseId });
+function pickName(raw) {
+  return raw.name || raw.label || raw.title || `#${pickId(raw)}`;
 }
-
-async function updateTestSteps(testcaseId, steps) {
-  // TODO: call backend API to create/update testcase steps
-  console.log("TODO update test steps", { testcaseId, steps });
-}
-
-// -----------------------------
-// Type detection & loader mapping
-// -----------------------------
-// Pick best name/id from a record returned by API (field names vary).
-function pickName(n) {
-  return n.name || n.label || n.title || `#${pickId(n)}`;
-}
-function pickId(n) {
-  return n.id ?? n.itemId ?? n.trackerId ?? n.projectId ?? "";
-}
-
-// Decide if an item is a "testcase". Codebeamer typically marks tracker type
-// or item type as containing "Test Case". Fallback to false (treated as item).
-function isTestcase(node) {
-  const t =
-    (node.type || node.itemType || node.trackerType || node.kind || "") + "";
+function isTestcase(raw) {
+  const t = (raw.type || raw.itemType || raw.trackerType || raw.kind || "") + "";
   return /test\s*case/i.test(t);
 }
+function normalizeNode(raw, parentKind) {
+  let kind;
+  if (parentKind === "project") kind = "tracker";
+  else if (parentKind === "tracker" || parentKind === "item")
+    kind = isTestcase(raw) ? "testcase" : "item";
+  else kind = "item";
+  return { id: pickId(raw), name: pickName(raw), kind, raw };
+}
 
-// Return a loader function for children of the given node, or null for leaves.
-function getChildLoader(node) {
-  switch (node._kind) {
-    case "project":
-      return () => api.listTrackers(node._id);
-    case "tracker":
-      return () => api.listTrackerChildren(node._id);
-    case "item":
-      return () => api.listItemChildren(node._id);
-    case "testcase":
-      return null; // leaf
+// ============================================================
+// TREE RENDERING
+// ============================================================
+const treeEl = document.getElementById("tree");
+
+function getLoader(node) {
+  switch (node.kind) {
+    case "project":  return () => browseApi.trackers(node.id);
+    case "tracker":  return () => browseApi.trackerChildren(node.id);
+    case "item":     return () => browseApi.itemChildren(node.id);
+    default:         return null; // testcase is a leaf
   }
 }
 
-// Build a normalized child node from raw API data + parent kind.
-function normalizeChild(raw, parentKind) {
-  const id = pickId(raw);
-  const name = pickName(raw);
-  let kind;
-  if (parentKind === "project") kind = "tracker";
-  else if (parentKind === "tracker") kind = isTestcase(raw) ? "testcase" : "item";
-  else if (parentKind === "item") kind = isTestcase(raw) ? "testcase" : "item";
-  else kind = "item";
-  return { _id: id, _name: name, _kind: kind, _raw: raw };
-}
-
-// -----------------------------
-// Tree rendering
-// -----------------------------
-const treeEl = document.getElementById("tree");
-const detailEl = document.getElementById("detail");
-
-function renderNode(node) {
+function renderTreeNode(node) {
   const li = document.createElement("li");
 
   const row = document.createElement("div");
-  row.className = "tree-node";
-  row.dataset.kind = node._kind;
+  row.className = "tree-row";
+  row.dataset.kind = node.kind;
 
   const arrow = document.createElement("span");
-  arrow.className = "arrow";
+  arrow.className = "tree-arrow" + (node.kind === "testcase" ? " leaf" : "");
   arrow.textContent = "▶";
-  if (node._kind === "testcase") arrow.classList.add("leaf");
   row.appendChild(arrow);
 
   const icon = document.createElement("span");
-  icon.className = "icon";
-  icon.textContent = ICONS[node._kind] || "•";
+  icon.className = "tree-icon";
+  icon.textContent = KIND_ICON[node.kind] || "•";
   row.appendChild(icon);
 
   const label = document.createElement("span");
-  label.className = "label";
-  label.textContent = node._name;
+  label.className = "tree-label";
+  label.textContent = node.name;
   row.appendChild(label);
 
-  const idSpan = document.createElement("span");
-  idSpan.className = "id";
-  idSpan.textContent = `#${node._id}`;
-  row.appendChild(idSpan);
+  const idBadge = document.createElement("span");
+  idBadge.className = "tree-id";
+  idBadge.textContent = `#${node.id}`;
+  row.appendChild(idBadge);
 
   const childUl = document.createElement("ul");
+  childUl.className = "tree-children";
   childUl.style.display = "none";
-  childUl.style.height = "0px";
 
   let loaded = false;
   let expanded = false;
-  let lastApiUrl = null;
 
   row.addEventListener("click", async (e) => {
     e.stopPropagation();
-    selectNode(row, node, lastApiUrl);
+    selectNode(row, node);
 
-    const loader = getChildLoader(node);
-    if (!loader) return; // leaf (testcase) -- handled in selectNode
+    const loader = getLoader(node);
+    if (!loader) return;
 
     if (!loaded) {
-      const loading = document.createElement("li");
-      loading.className = "loading";
-      loading.textContent = "Loading...";
-      childUl.appendChild(loading);
+      childUl.innerHTML = `<li class="tree-msg">Loading…</li>`;
       childUl.style.display = "block";
       try {
-        const { url, data } = await loader();
-        lastApiUrl = url;
+        const data = await loader();
+        const list = Array.isArray(data) ? data : (data.items || data.children || []);
         childUl.innerHTML = "";
-        const list = Array.isArray(data) ? data : data.items || data.children || [];
         if (list.length === 0) {
-          const empty = document.createElement("li");
-          empty.className = "loading";
-          empty.textContent = "(no children)";
-          childUl.appendChild(empty);
+          childUl.innerHTML = `<li class="tree-msg muted">(no children)</li>`;
         } else {
+          const frag = document.createDocumentFragment();
           for (const raw of list) {
-            const child = normalizeChild(raw, node._kind);
-            childUl.appendChild(renderNode(child));
+            frag.appendChild(renderTreeNode(normalizeNode(raw, node.kind)));
           }
+          childUl.appendChild(frag);
         }
         loaded = true;
-        // refresh detail panel if this node is still selected
-        if (selected && selected.node === node) {
-          selected.apiUrl = url;
-          showDetail(node, url);
-        }
       } catch (err) {
-        childUl.innerHTML = "";
-        const errEl = document.createElement("li");
-        errEl.className = "error";
-        errEl.textContent = `Error: ${err.message}`;
-        childUl.appendChild(errEl);
+        childUl.innerHTML = `<li class="tree-msg error">⚠ ${esc(err.message)}</li>`;
       }
     }
 
-    // Toggle with anime.js animation
     expanded = !expanded;
     row.classList.toggle("expanded", expanded);
-    animateToggle(childUl, expanded);
+    animateChildren(childUl, expanded);
   });
 
-  // Expose a refresh method so the toolbar can reload this node's children.
-  node._refresh = async () => {
+  // Allow external code to reset and reload this node's children.
+  node._refresh = () => {
     loaded = false;
     childUl.innerHTML = "";
-    if (!expanded) row.click();
-    else {
-      // collapse then re-open to trigger reload
-      row.click();
-      setTimeout(() => row.click(), 250);
+    if (expanded) {
+      expanded = false;
+      row.classList.remove("expanded");
+      animateChildren(childUl, false);
     }
   };
 
@@ -206,193 +177,302 @@ function renderNode(node) {
   return li;
 }
 
-function animateToggle(ul, expanded) {
-  if (expanded) {
+function animateChildren(ul, open) {
+  if (open) {
     ul.style.display = "block";
-    // measure target height
-    ul.style.height = "auto";
-    const targetHeight = ul.scrollHeight;
+    const target = ul.scrollHeight;
     ul.style.height = "0px";
     anime({
-      targets: ul,
-      height: [0, targetHeight],
-      opacity: [0, 1],
-      duration: 220,
-      easing: "easeOutQuad",
+      targets: ul, height: [0, target], opacity: [0, 1],
+      duration: 200, easing: "easeOutQuad",
       complete: () => { ul.style.height = "auto"; },
     });
   } else {
-    const startHeight = ul.scrollHeight;
-    ul.style.height = startHeight + "px";
+    ul.style.height = ul.scrollHeight + "px";
     anime({
-      targets: ul,
-      height: [startHeight, 0],
-      opacity: [1, 0],
-      duration: 180,
-      easing: "easeInQuad",
-      complete: () => { ul.style.display = "none"; },
+      targets: ul, height: 0, opacity: 0,
+      duration: 160, easing: "easeInQuad",
+      complete: () => {
+        ul.style.display = "none";
+        ul.style.height = "";
+        ul.style.opacity = "";
+      },
     });
   }
 }
 
-// -----------------------------
-// Selection & detail panel
-// -----------------------------
-function selectNode(rowEl, node, apiUrl) {
-  document.querySelectorAll(".tree-node.selected").forEach((el) =>
-    el.classList.remove("selected")
-  );
-  rowEl.classList.add("selected");
-  selected = { node, apiUrl, rowEl };
-  showDetail(node, apiUrl);
-}
-
-async function showDetail(node, apiUrl) {
-  const cbLink = node._id
-    ? `<a href="${CB_ITEM_URL(node._id)}" target="_blank">${CB_ITEM_URL(node._id)}</a>`
-    : "<span class='muted'>(no item id)</span>";
-
-  detailEl.innerHTML = `
-    <h2>${escapeHtml(node._name)}</h2>
-    <dl>
-      <dt>ID</dt><dd>${escapeHtml(String(node._id))}</dd>
-      <dt>Type</dt><dd>${escapeHtml(node._kind)}</dd>
-      <dt>API URL</dt><dd>${apiUrl ? escapeHtml(apiUrl) : "<span class='muted'>(not loaded yet)</span>"}</dd>
-      <dt>Codebeamer</dt><dd>${cbLink}</dd>
-    </dl>
-    <div id="fieldsBox"></div>
-  `;
-
-  // For items/testcases, also load the fields and show JSON
-  if (node._kind === "item" || node._kind === "testcase") {
-    const box = document.getElementById("fieldsBox");
-    box.innerHTML = `<p class="muted">Loading fields...</p>`;
-    try {
-      const { url, data } = await api.getItemFields(node._id);
-      box.innerHTML = `
-        <h3>Fields</h3>
-        <p class="muted">${escapeHtml(url)}</p>
-        <pre>${escapeHtml(JSON.stringify(data, null, 2))}</pre>
-      `;
-    } catch (err) {
-      box.innerHTML = `<p class="error">Error loading fields: ${escapeHtml(err.message)}</p>`;
-    }
-  }
-}
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-  }[c]));
-}
-
-// -----------------------------
-// Initial load: list projects
-// -----------------------------
+// ============================================================
+// TREE INIT
+// ============================================================
 async function loadProjects() {
-  treeEl.innerHTML = `<li class="loading">Loading projects...</li>`;
+  treeEl.innerHTML = `<li class="tree-msg">Loading projects…</li>`;
   try {
-    const { data } = await api.listProjects();
+    const data = await browseApi.projects();
     treeEl.innerHTML = "";
-    const list = Array.isArray(data) ? data : data.projects || [];
+    const list = Array.isArray(data) ? data : (data.projects || []);
     if (list.length === 0) {
-      treeEl.innerHTML = `<li class="loading">(no projects)</li>`;
+      treeEl.innerHTML = `<li class="tree-msg muted">(no projects)</li>`;
       return;
     }
+    const frag = document.createDocumentFragment();
     for (const raw of list) {
-      const node = {
-        _id: pickId(raw),
-        _name: pickName(raw),
-        _kind: "project",
-        _raw: raw,
-      };
-      treeEl.appendChild(renderNode(node));
+      const node = { id: pickId(raw), name: pickName(raw), kind: "project", raw };
+      frag.appendChild(renderTreeNode(node));
     }
+    treeEl.appendChild(frag);
   } catch (err) {
-    treeEl.innerHTML = `<li class="error">Error loading projects: ${escapeHtml(err.message)}</li>`;
+    treeEl.innerHTML = `<li class="tree-msg error">⚠ ${esc(err.message)}</li>`;
   }
 }
 
-// -----------------------------
-// Modal helpers
-// -----------------------------
-const modal = document.getElementById("modal");
-const modalTitle = document.getElementById("modalTitle");
-const modalBody = document.getElementById("modalBody");
-const modalSubmit = document.getElementById("modalSubmit");
+document.getElementById("btnRefreshTree").addEventListener("click", loadProjects);
 
-function openModal(title, bodyHtml, onSubmit) {
-  modalTitle.textContent = title;
-  modalBody.innerHTML = bodyHtml;
-  modal.classList.remove("hidden");
-  modalSubmit.onclick = async () => {
-    try { await onSubmit(); } finally { closeModal(); }
-  };
+// ============================================================
+// SELECTION & WORKSPACE
+// ============================================================
+const workspaceEl = document.getElementById("workspace");
+let selectedNode = null;
+
+function selectNode(rowEl, node) {
+  document.querySelectorAll(".tree-row.active").forEach((r) => r.classList.remove("active"));
+  rowEl.classList.add("active");
+  selectedNode = { row: rowEl, node };
+  renderWorkspace(node);
 }
-function closeModal() { modal.classList.add("hidden"); }
-document.getElementById("modalClose").onclick = closeModal;
-document.getElementById("modalCancel").onclick = closeModal;
 
-// -----------------------------
-// Toolbar buttons
-// -----------------------------
-document.getElementById("btnCreateTestcase").onclick = () => {
-  if (!selected) { alert("Please select a parent node in the tree first."); return; }
-  const parentId = selected.node._id;
-  openModal(
-    "Create Testcase",
-    `
-      <label>Parent ID
-        <input id="f_parent" value="${escapeHtml(String(parentId))}" readonly />
-      </label>
-      <label>Testcase name
-        <input id="f_name" placeholder="My new testcase" />
-      </label>
-      <label>Description
-        <textarea id="f_desc" placeholder="Description"></textarea>
-      </label>
-    `,
-    async () => {
-      const name = document.getElementById("f_name").value.trim();
-      const desc = document.getElementById("f_desc").value.trim();
-      if (!name) { alert("Name required"); return; }
-      await createTestcase(parentId, name, desc);
-      // also demonstrate the link placeholder
-      await linkTestcaseToParent(parentId, "<new-testcase-id>");
-      alert("createTestcase() is a TODO placeholder. See console.");
+function renderWorkspace(node) {
+  const canCreate = node.kind !== "testcase";
+  const cbUrl = node.id ? CB_ISSUE_URL(node.id) : null;
+
+  workspaceEl.innerHTML = `
+    <div class="ws-detail">
+      <div class="ws-detail-header">
+        <span class="ws-kind-badge ws-kind-${esc(node.kind)}">${esc(KIND_LABEL[node.kind] || node.kind)}</span>
+        <h2 class="ws-title">${esc(node.name)}</h2>
+        <span class="ws-id">#${esc(String(node.id))}</span>
+      </div>
+      ${cbUrl ? `<p class="ws-cb-link"><a href="${esc(cbUrl)}" target="_blank" rel="noopener">Open in Codebeamer ↗</a></p>` : ""}
+      ${canCreate ? `<button class="btn-primary" id="btnCreateHere">+ Create Testcase here</button>` : ""}
+      <div id="fieldsArea" class="ws-fields"></div>
+    </div>
+    <div id="createArea"></div>
+  `;
+
+  if (canCreate) {
+    document.getElementById("btnCreateHere").addEventListener("click", () => {
+      showCreateForm(node);
+    });
+  }
+
+  if (node.kind === "item" || node.kind === "testcase") {
+    loadItemFields(node.id);
+  }
+}
+
+async function loadItemFields(itemId) {
+  const fieldsArea = document.getElementById("fieldsArea");
+  if (!fieldsArea) return;
+  fieldsArea.innerHTML = `<p class="muted">Loading fields…</p>`;
+  try {
+    const data = await browseApi.itemFields(itemId);
+    fieldsArea.innerHTML = `
+      <h3 class="ws-section-title">Fields</h3>
+      <pre class="code-block">${esc(JSON.stringify(data, null, 2))}</pre>
+    `;
+  } catch (err) {
+    fieldsArea.innerHTML = `<p class="error">Error loading fields: ${esc(err.message)}</p>`;
+  }
+}
+
+// ============================================================
+// CREATE TESTCASE FORM
+// ============================================================
+function showCreateForm(parentNode) {
+  const createArea = document.getElementById("createArea");
+  if (!createArea) return;
+
+  createArea.innerHTML = `
+    <form class="create-form" id="createForm">
+      <h3 class="ws-section-title">
+        Create Testcase under &ldquo;${esc(parentNode.name)}&rdquo; (#${esc(String(parentNode.id))})
+      </h3>
+
+      <div class="form-group">
+        <label>Testcase Name <span class="required">*</span></label>
+        <input type="text" id="cf_name" class="form-input" required placeholder="My new testcase" />
+      </div>
+
+      <div class="form-group">
+        <label>Description</label>
+        <textarea id="cf_desc" class="form-input" rows="2" placeholder="Optional description"></textarea>
+      </div>
+
+      <div class="form-group steps-header-row">
+        <label>Test Steps <span class="required">*</span></label>
+        <div class="steps-count-row">
+          <input type="number" id="cf_num_steps" class="form-input num-input" min="1" max="${MAX_STEPS}" value="1" />
+          <button type="button" class="btn-outline" id="cf_gen_steps">Generate Rows</button>
+        </div>
+      </div>
+      <div id="cf_steps" class="steps-container"></div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn-primary" id="cf_submit">
+          <span class="spinner d-none" id="cf_spinner"></span>
+          <span id="cf_submit_label">Create Testcase</span>
+        </button>
+        <button type="button" class="btn-secondary" id="cf_cancel">Cancel</button>
+      </div>
+      <div id="cf_result"></div>
+    </form>
+  `;
+
+  const stepsDiv = document.getElementById("cf_steps");
+
+  function generateStepRows() {
+    const n = Math.max(1, Math.min(MAX_STEPS, parseInt(document.getElementById("cf_num_steps").value, 10) || 1));
+    stepsDiv.innerHTML = "";
+    const frag = document.createDocumentFragment();
+    for (let i = 0; i < n; i++) frag.appendChild(buildStepRow(i));
+    stepsDiv.appendChild(frag);
+    if (window.anime) {
+      anime({
+        targets: "#cf_steps .step-row",
+        opacity: [0, 1], translateY: [8, 0],
+        delay: anime.stagger(40), duration: 200, easing: "easeOutQuad",
+      });
     }
-  );
-};
+  }
 
-document.getElementById("btnEditSteps").onclick = () => {
-  if (!selected || selected.node._kind !== "testcase") {
-    alert("Please select a testcase node first.");
+  document.getElementById("cf_gen_steps").addEventListener("click", generateStepRows);
+  document.getElementById("cf_cancel").addEventListener("click", () => {
+    createArea.innerHTML = "";
+  });
+  document.getElementById("createForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    await submitCreate(parentNode);
+  });
+
+  generateStepRows();
+}
+
+function buildStepRow(index) {
+  const div = document.createElement("div");
+  div.className = "step-row";
+  div.dataset.index = String(index);
+  div.innerHTML = `
+    <div class="step-number">Step ${index + 1}</div>
+    <div class="step-fields">
+      <div class="step-field">
+        <label>Action <span class="required">*</span></label>
+        <textarea class="form-input step-action" rows="2" required></textarea>
+      </div>
+      <div class="step-field">
+        <label>Expected Result <span class="required">*</span></label>
+        <textarea class="form-input step-expected" rows="2" required></textarea>
+      </div>
+      <div class="step-check">
+        <label><input type="checkbox" class="step-critical" /> Critical</label>
+      </div>
+    </div>
+  `;
+  return div;
+}
+
+function collectSteps() {
+  return [...document.querySelectorAll("#cf_steps .step-row")].map((row) => ({
+    action: row.querySelector(".step-action").value.trim(),
+    expected_result: row.querySelector(".step-expected").value.trim(),
+    critical: row.querySelector(".step-critical").checked,
+  }));
+}
+
+async function submitCreate(parentNode) {
+  const resultEl    = document.getElementById("cf_result");
+  const spinner     = document.getElementById("cf_spinner");
+  const label       = document.getElementById("cf_submit_label");
+  const submitBtn   = document.getElementById("cf_submit");
+
+  const { username, password } = getCreds();
+  if (!username || !password) {
+    resultEl.innerHTML = `<p class="error">Please enter your Codebeamer username and password in the header.</p>`;
     return;
   }
-  const tcId = selected.node._id;
-  openModal(
-    "Edit Test Steps",
-    `
-      <p class="muted">Testcase ID: ${escapeHtml(String(tcId))}</p>
-      <label>Steps (one per line)
-        <textarea id="f_steps" placeholder="Step 1&#10;Step 2"></textarea>
-      </label>
-    `,
-    async () => {
-      const raw = document.getElementById("f_steps").value;
-      const steps = raw.split("\n").map((s) => s.trim()).filter(Boolean);
-      await updateTestSteps(tcId, steps);
-      alert("updateTestSteps() is a TODO placeholder. See console.");
-    }
-  );
-};
 
-document.getElementById("btnRefresh").onclick = async () => {
-  if (!selected) { alert("Please select a node first."); return; }
-  if (typeof selected.node._refresh === "function") {
-    await selected.node._refresh();
+  const name  = document.getElementById("cf_name").value.trim();
+  const desc  = document.getElementById("cf_desc").value.trim();
+  const steps = collectSteps();
+
+  if (!name) {
+    resultEl.innerHTML = `<p class="error">Testcase name is required.</p>`;
+    return;
   }
-};
+  if (steps.length === 0) {
+    resultEl.innerHTML = `<p class="error">At least one test step is required.</p>`;
+    return;
+  }
 
-// Go!
+  const payload = {
+    username,
+    password,
+    parent_id: Number(parentNode.id),
+    testcase_name: name,
+    description: desc,
+    steps,
+  };
+
+  submitBtn.disabled = true;
+  spinner.classList.remove("d-none");
+  label.textContent = "Creating…";
+  resultEl.innerHTML = "";
+
+  try {
+    const res = await fetch(`${CREATE_BASE}/api/testcases/create-with-steps`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    let body = null;
+    try { body = await res.json(); } catch (_) {}
+
+    if (!res.ok) {
+      const detail =
+        (body && (body.detail || body.message)) || `Request failed (${res.status})`;
+      resultEl.innerHTML = `
+        <div class="result-error">
+          <strong>Error:</strong> ${esc(typeof detail === "string" ? detail : JSON.stringify(detail))}
+        </div>`;
+      return;
+    }
+
+    resultEl.innerHTML = `
+      <div class="result-success">
+        <strong>✅ Testcase created!</strong>
+        <dl>
+          <dt>ID</dt>     <dd>${esc(String(body.testcase_id))}</dd>
+          <dt>Name</dt>   <dd>${esc(body.testcase_name)}</dd>
+          <dt>Parent</dt> <dd><a href="${esc(body.parent_url)}" target="_blank" rel="noopener">${esc(body.parent_url)}</a></dd>
+          <dt>URL</dt>    <dd><a href="${esc(body.testcase_url)}" target="_blank" rel="noopener">${esc(body.testcase_url)}</a></dd>
+        </dl>
+      </div>`;
+    resultEl.scrollIntoView({ behavior: "smooth", block: "nearest" });
+
+    // Refresh the parent node so the new testcase appears in the tree.
+    if (selectedNode && selectedNode.node === parentNode && typeof parentNode._refresh === "function") {
+      parentNode._refresh();
+    }
+  } catch (err) {
+    resultEl.innerHTML = `
+      <div class="result-error"><strong>Network error:</strong> ${esc(err.message)}</div>`;
+  } finally {
+    submitBtn.disabled = false;
+    spinner.classList.add("d-none");
+    label.textContent = "Create Testcase";
+  }
+}
+
+// ============================================================
+// INIT
+// ============================================================
 loadProjects();
