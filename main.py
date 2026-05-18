@@ -1,218 +1,139 @@
-import os
-import uuid
-from typing import List, Optional
+"""
+Unified Codebeamer Test Manager Creator UI
 
-import requests
+Single web application:
+- Serves the tree view UI on port 5000
+- Provides backend API endpoints
+- Proxies to test-manager backend (port 8082) for Codebeamer API calls
+
+To run:
+  python main.py
+  
+To access:
+  http://localhost:5000
+"""
+
+import os
+import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
-from requests.auth import HTTPBasicAuth
+
+app = FastAPI(title="Codebeamer Test Manager Creator UI")
+
+# Test-Manager Backend URL (where Codebeamer API endpoints are)
+TEST_MANAGER_BASE = "http://localhost:8082"
+
+# ========== Frontend ========== 
+@app.get("/")
+def index():
+    """Serve the main HTML page"""
+    return FileResponse(os.path.join(os.path.dirname(__file__), "index.html"))
 
 
-# --------------------------------------------------------------------------- #
-# Codebeamer configuration
-# --------------------------------------------------------------------------- #
-BASE_URL = "http://cb.corp.bos-semi.com/cb/api/v3"
-UI_BASE_URL = "http://cb.corp.bos-semi.com/cb"
+# ========== Backend API Endpoints (Proxy to test-manager) ==========
 
-TESTCASE_TRACKER_ID = 238730
-
-TEST_STEPS_FIELD_ID = 1000000
-ACTION_FIELD_ID = 1000001
-EXPECTED_RESULT_FIELD_ID = 1000002
-CRITICAL_FIELD_ID = 1000003
-STEP_ID_FIELD_ID = 1000004
-
-
-def issue_url(item_id: int) -> str:
-    return f"{UI_BASE_URL}/issue/{item_id}"
+@app.get("/api/projects")
+async def list_projects():
+    """List all projects from Codebeamer"""
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(f"{TEST_MANAGER_BASE}/cb/projects", timeout=10)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            raise HTTPException(status_code=502, detail=f"Failed to fetch projects: {str(e)}")
 
 
-def create_testcase_under_parent(
-    auth: HTTPBasicAuth,
-    parent_id: int,
-    testcase_name: str,
-    description: str = "",
-) -> dict:
-    create_payload = {
-        "name": testcase_name,
-        "description": description or f"Auto-created testcase: {testcase_name}",
-    }
-
-    r = requests.post(
-        f"{BASE_URL}/trackers/{TESTCASE_TRACKER_ID}/items",
-        auth=auth,
-        json=create_payload,
-    )
-
-    if not r.ok:
-        raise RuntimeError(f"Failed to create testcase: {r.text}")
-
-    created = r.json()
-    testcase_id = created["id"]
-
-    link_payload = {
-        "id": testcase_id,
-        "commonItemId": testcase_id,
-        "version": 0,
-    }
-
-    r = requests.post(
-        f"{BASE_URL}/items/{parent_id}/children",
-        auth=auth,
-        json=link_payload,
-    )
-
-    if not r.ok:
-        raise RuntimeError(f"Failed to link testcase under parent: {r.text}")
-
-    return {
-        "parent_id": parent_id,
-        "parent_url": issue_url(parent_id),
-        "testcase_id": testcase_id,
-        "testcase_url": issue_url(testcase_id),
-        "testcase_name": testcase_name,
-    }
-
-
-def update_testcase_steps(
-    auth: HTTPBasicAuth,
-    testcase_id: int,
-    steps: list,
-) -> dict:
-    rows = []
-
-    for step in steps:
-        rows.append([
-            {
-                "fieldId": ACTION_FIELD_ID,
-                "value": step["action"],
-                "type": "WikiTextFieldValue",
-            },
-            {
-                "fieldId": EXPECTED_RESULT_FIELD_ID,
-                "value": step["expected_result"],
-                "type": "WikiTextFieldValue",
-            },
-            {
-                "fieldId": CRITICAL_FIELD_ID,
-                "value": step.get("critical", False),
-                "type": "BoolFieldValue",
-            },
-            {
-                "fieldId": STEP_ID_FIELD_ID,
-                "value": step.get("id", uuid.uuid4().hex),
-                "type": "WikiTextFieldValue",
-            },
-        ])
-
-    payload = {
-        "fieldValues": [],
-        "tableValues": [
-            {
-                "fieldId": TEST_STEPS_FIELD_ID,
-                "values": rows,
-                "type": "TableFieldValue",
-            }
-        ],
-    }
-
-    r = requests.put(
-        f"{BASE_URL}/items/{testcase_id}/fields",
-        auth=auth,
-        params={"quietMode": "false"},
-        json=payload,
-    )
-
-    if not r.ok:
-        raise RuntimeError(f"Failed to update testcase steps: {r.text}")
-
-    if r.text:
-        return r.json()
-
-    return {"status": "success", "testcase_id": testcase_id}
-
-
-# --------------------------------------------------------------------------- #
-# FastAPI app
-# --------------------------------------------------------------------------- #
-app = FastAPI(title="Codebeamer Testcase Creator")
-
-
-class TestStep(BaseModel):
-    action: str
-    expected_result: str
-    critical: bool = False
-
-
-class CreateWithStepsRequest(BaseModel):
-    username: str
-    password: str
-    parent_id: int
-    testcase_name: str
-    description: Optional[str] = ""
-    steps: List[TestStep] = Field(default_factory=list)
-
-
-@app.post("/api/testcases/create-with-steps")
-def create_with_steps(req: CreateWithStepsRequest):
-    # Validate required fields
-    if not req.username or not req.password:
-        raise HTTPException(status_code=400, detail="Username and password are required")
-    if not req.testcase_name:
-        raise HTTPException(status_code=400, detail="Testcase name is required")
-    if not req.parent_id:
-        raise HTTPException(status_code=400, detail="Parent ID is required")
-    if not req.steps:
-        raise HTTPException(status_code=400, detail="At least one test step is required")
-
-    for i, s in enumerate(req.steps, start=1):
-        if not s.action or not s.expected_result:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Step {i}: action and expected_result are required",
+@app.get("/api/trackers")
+async def list_trackers(project_id: int):
+    """List trackers for a project"""
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(
+                f"{TEST_MANAGER_BASE}/cb/projects/list-trackers",
+                params={"project_id": project_id},
+                timeout=10
             )
-
-    auth = HTTPBasicAuth(req.username, req.password)
-
-    try:
-        created = create_testcase_under_parent(
-            auth=auth,
-            parent_id=req.parent_id,
-            testcase_name=req.testcase_name,
-            description=req.description or "",
-        )
-
-        steps_payload = [s.model_dump() for s in req.steps]
-        update_testcase_steps(
-            auth=auth,
-            testcase_id=created["testcase_id"],
-            steps=steps_payload,
-        )
-    except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=str(e))
-    except Exception as e:  # noqa: BLE001
-        raise HTTPException(status_code=500, detail=f"Unexpected error: {e}")
-
-    return {
-        "status": "success",
-        "parent_id": created["parent_id"],
-        "parent_url": created["parent_url"],
-        "testcase_id": created["testcase_id"],
-        "testcase_url": created["testcase_url"],
-        "testcase_name": created["testcase_name"],
-    }
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            raise HTTPException(status_code=502, detail=f"Failed to fetch trackers: {str(e)}")
 
 
-# --------------------------------------------------------------------------- #
-# Static frontend
-# --------------------------------------------------------------------------- #
-STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+@app.get("/api/tracker-items")
+async def list_tracker_items(tracker_id: int):
+    """List items in a tracker"""
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(
+                f"{TEST_MANAGER_BASE}/cb/trackers/list-children",
+                params={"tracker_id": tracker_id},
+                timeout=10
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            raise HTTPException(status_code=502, detail=f"Failed to fetch tracker items: {str(e)}")
 
-if os.path.isdir(STATIC_DIR):
-    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
-    @app.get("/")
-    def index():
-        return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+@app.get("/api/item-children")
+async def list_item_children(item_id: int):
+    """List children items within an item"""
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(
+                f"{TEST_MANAGER_BASE}/cb/items/children-items-in-item",
+                params={"item_id": item_id},
+                timeout=10
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            raise HTTPException(status_code=502, detail=f"Failed to fetch item children: {str(e)}")
+
+
+@app.get("/api/item-fields")
+async def get_item_fields(item_id: int):
+    """Get field values for an item"""
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(
+                f"{TEST_MANAGER_BASE}/cb/items/fields",
+                params={"item_id": item_id},
+                timeout=10
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            raise HTTPException(status_code=502, detail=f"Failed to fetch item fields: {str(e)}")
+
+
+@app.post("/api/create-item")
+async def create_item(
+    tracker_id: int,
+    name: str,
+    description: str = "",
+    parent_item_id: int = None
+):
+    """Create a new item in a tracker"""
+    async with httpx.AsyncClient() as client:
+        try:
+            params = {
+                "tracker_id": tracker_id,
+                "test_set_name": name,
+                "test_set_description": description,
+            }
+            if parent_item_id:
+                params["parent_item_id"] = parent_item_id
+
+            response = await client.post(
+                f"{TEST_MANAGER_BASE}/cc/trackers/create/items-in-tracker",
+                params=params,
+                timeout=10
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            raise HTTPException(status_code=502, detail=f"Failed to create item: {str(e)}")
+

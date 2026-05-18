@@ -4,26 +4,199 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Codebeamer Test Manager</title>
-  <link rel="stylesheet" href="style.css" />
+  <style>
+    /* ========== Global Styles ========== */
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+      font-size: 14px;
+      color: #222;
+      background: #f5f6f8;
+    }
+
+    /* ========== Header ========== */
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      background: #2c3e50;
+      color: #fff;
+    }
+    .topbar h1 { margin: 0; font-size: 16px; font-weight: 600; }
+    .topbar .actions button {
+      margin-left: 6px;
+      padding: 6px 10px;
+      background: #3498db;
+      color: #fff;
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .topbar .actions button:hover { background: #2980b9; }
+
+    /* ========== Layout ========== */
+    .layout {
+      display: flex;
+      height: calc(100vh - 48px);
+    }
+    .panel {
+      background: #fff;
+      border: 1px solid #e1e4e8;
+      margin: 8px;
+      overflow: auto;
+      flex: 1;
+      border-radius: 4px;
+    }
+    .tree-panel { flex: 0 0 360px; }
+    .detail-panel { flex: 1; }
+    .panel-header {
+      padding: 8px 12px;
+      background: #f0f2f5;
+      border-bottom: 1px solid #e1e4e8;
+      font-weight: 600;
+    }
+
+    /* ========== Tree ========== */
+    .tree, .tree ul {
+      list-style: none;
+      padding-left: 0;
+      margin: 0;
+    }
+    .tree ul {
+      padding-left: 18px;
+      overflow: hidden;
+    }
+    .tree-node {
+      padding: 4px 8px;
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+      user-select: none;
+      border-radius: 3px;
+    }
+    .tree-node:hover { background: #eef3f8; }
+    .tree-node.selected { background: #d3e7f7; }
+    .tree-node .arrow {
+      display: inline-block;
+      width: 14px;
+      text-align: center;
+      transition: transform 0.2s;
+      color: #888;
+      font-size: 10px;
+    }
+    .tree-node.expanded .arrow { transform: rotate(90deg); }
+    .tree-node .arrow.leaf { visibility: hidden; }
+    .tree-node .icon { margin: 0 6px; }
+    .tree-node .label { flex: 1; }
+    .tree-node .id { color: #888; font-size: 11px; margin-left: 6px; }
+
+    .loading, .error {
+      padding: 4px 8px 4px 32px;
+      font-style: italic;
+      color: #888;
+    }
+    .error { color: #c0392b; }
+
+    /* ========== Detail Panel ========== */
+    .detail { padding: 12px 16px; }
+    .detail h2 { margin-top: 0; font-size: 18px; }
+    .detail dl { display: grid; grid-template-columns: 120px 1fr; gap: 6px 12px; }
+    .detail dt { font-weight: 600; color: #555; }
+    .detail dd { margin: 0; word-break: break-all; }
+    .detail a { color: #2980b9; }
+    .muted { color: #888; }
+    .detail pre {
+      background: #f5f6f8;
+      border: 1px solid #e1e4e8;
+      padding: 10px;
+      border-radius: 4px;
+      max-height: 50vh;
+      overflow: auto;
+      font-size: 12px;
+    }
+
+    /* ========== Modal ========== */
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    .modal.hidden { display: none; }
+    .modal-content {
+      background: #fff;
+      width: 440px;
+      max-width: 90%;
+      border-radius: 6px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    }
+    .modal-header, .modal-footer {
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .modal-header { border-bottom: 1px solid #e1e4e8; }
+    .modal-footer { border-top: 1px solid #e1e4e8; justify-content: flex-end; gap: 8px; }
+    .modal-header h3 { margin: 0; font-size: 16px; }
+    .close-btn {
+      background: none;
+      border: none;
+      font-size: 22px;
+      cursor: pointer;
+      line-height: 1;
+    }
+    .modal-body { padding: 14px; }
+    .modal-body label {
+      display: block;
+      margin-bottom: 10px;
+      font-size: 13px;
+    }
+    .modal-body input,
+    .modal-body textarea {
+      width: 100%;
+      padding: 6px 8px;
+      border: 1px solid #ccd0d4;
+      border-radius: 3px;
+      font: inherit;
+      margin-top: 3px;
+    }
+    .modal-body textarea { min-height: 100px; resize: vertical; }
+    .modal-footer button {
+      padding: 6px 12px;
+      border: 1px solid #ccd0d4;
+      background: #fff;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    .modal-footer button.primary {
+      background: #3498db;
+      color: #fff;
+      border-color: #3498db;
+    }
+  </style>
 </head>
 <body>
   <header class="topbar">
     <h1>Codebeamer Test Manager</h1>
     <div class="actions">
       <button id="btnCreateTestcase">+ Create Testcase</button>
-      <button id="btnEditSteps">Edit Test Steps</button>
       <button id="btnRefresh">Refresh Children</button>
     </div>
   </header>
 
   <main class="layout">
-    <!-- Left: tree -->
     <section class="panel tree-panel">
       <div class="panel-header">Projects</div>
       <ul id="tree" class="tree"></ul>
     </section>
 
-    <!-- Right: details -->
     <section class="panel detail-panel">
       <div class="panel-header">Details</div>
       <div id="detail" class="detail">
@@ -32,7 +205,6 @@
     </section>
   </main>
 
-  <!-- Simple modal -->
   <div id="modal" class="modal hidden">
     <div class="modal-content">
       <div class="modal-header">
@@ -48,6 +220,366 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.1/lib/anime.min.js"></script>
-  <script src="app.js"></script>
+  <script>
+    /* ========== Tree View Application ========== */
+    const API_BASE = "";  // Same origin (port 5000)
+    const CB_ITEM_URL = (id) => `http://cb.corp.bos-semi.com/cb/issue/${id}`;
+
+    const ICONS = {
+      project: "📁",
+      tracker: "📘",
+      item: "📄",
+      testcase: "✅",
+    };
+
+    let selected = null;
+
+    /* ========== API Helpers ========== */
+    async function apiGet(path) {
+      const url = `${API_BASE}${path}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      const data = await res.json();
+      return { url, data };
+    }
+
+    async function apiPost(path, payload) {
+      const url = `${API_BASE}${path}`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const error = await res.text();
+        throw new Error(`${res.status}: ${error}`);
+      }
+      const data = await res.json();
+      return { url, data };
+    }
+
+    const api = {
+      listProjects: () => apiGet(`/api/projects`),
+      listTrackers: (projectId) => apiGet(`/api/trackers?project_id=${projectId}`),
+      listTrackerChildren: (trackerId) => apiGet(`/api/tracker-items?tracker_id=${trackerId}`),
+      listItemChildren: (itemId) => apiGet(`/api/item-children?item_id=${itemId}`),
+      getItemFields: (itemId) => apiGet(`/api/item-fields?item_id=${itemId}`),
+      createTrackerItem: (trackerId, name, description, parentItemId) =>
+        apiPost(`/api/create-item`, {
+          tracker_id: trackerId,
+          name,
+          description,
+          parent_item_id: parentItemId,
+        }),
+    };
+
+    async function createTestcase(parentId, testcaseName, description) {
+      const trackerId = 238730;
+      const result = await api.createTrackerItem(trackerId, testcaseName, description, parentId);
+      return result.data;
+    }
+
+    /* ========== Tree Functions ========== */
+    function pickName(n) {
+      return n.name || n.label || n.title || `#${pickId(n)}`;
+    }
+
+    function pickId(n) {
+      return n.id ?? n.itemId ?? n.trackerId ?? n.projectId ?? "";
+    }
+
+    function isTestcase(node) {
+      const t = (node.type || node.itemType || node.trackerType || node.kind || "") + "";
+      return /test\s*case/i.test(t);
+    }
+
+    function getChildLoader(node) {
+      switch (node._kind) {
+        case "project":
+          return () => api.listTrackers(node._id);
+        case "tracker":
+          return () => api.listTrackerChildren(node._id);
+        case "item":
+          return () => api.listItemChildren(node._id);
+        case "testcase":
+          return null;
+      }
+    }
+
+    function normalizeChild(raw, parentKind) {
+      const id = pickId(raw);
+      const name = pickName(raw);
+      let kind;
+      if (parentKind === "project") kind = "tracker";
+      else if (parentKind === "tracker") kind = isTestcase(raw) ? "testcase" : "item";
+      else if (parentKind === "item") kind = isTestcase(raw) ? "testcase" : "item";
+      else kind = "item";
+      return { _id: id, _name: name, _kind: kind, _raw: raw };
+    }
+
+    const treeEl = document.getElementById("tree");
+    const detailEl = document.getElementById("detail");
+
+    function renderNode(node) {
+      const li = document.createElement("li");
+      const row = document.createElement("div");
+      row.className = "tree-node";
+      row.dataset.kind = node._kind;
+
+      const arrow = document.createElement("span");
+      arrow.className = "arrow";
+      arrow.textContent = "▶";
+      if (node._kind === "testcase") arrow.classList.add("leaf");
+      row.appendChild(arrow);
+
+      const icon = document.createElement("span");
+      icon.className = "icon";
+      icon.textContent = ICONS[node._kind] || "•";
+      row.appendChild(icon);
+
+      const label = document.createElement("span");
+      label.className = "label";
+      label.textContent = node._name;
+      row.appendChild(label);
+
+      const idSpan = document.createElement("span");
+      idSpan.className = "id";
+      idSpan.textContent = `#${node._id}`;
+      row.appendChild(idSpan);
+
+      const childUl = document.createElement("ul");
+      childUl.style.display = "none";
+      childUl.style.height = "0px";
+
+      let loaded = false;
+      let expanded = false;
+      let lastApiUrl = null;
+
+      row.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        selectNode(row, node, lastApiUrl);
+
+        const loader = getChildLoader(node);
+        if (!loader) return;
+
+        if (!loaded) {
+          const loading = document.createElement("li");
+          loading.className = "loading";
+          loading.textContent = "Loading...";
+          childUl.appendChild(loading);
+          childUl.style.display = "block";
+          try {
+            const { url, data } = await loader();
+            lastApiUrl = url;
+            childUl.innerHTML = "";
+            const list = Array.isArray(data) ? data : data.items || data.children || [];
+            if (list.length === 0) {
+              const empty = document.createElement("li");
+              empty.className = "loading";
+              empty.textContent = "(no children)";
+              childUl.appendChild(empty);
+            } else {
+              for (const raw of list) {
+                const child = normalizeChild(raw, node._kind);
+                childUl.appendChild(renderNode(child));
+              }
+            }
+            loaded = true;
+            if (selected && selected.node === node) {
+              selected.apiUrl = url;
+              showDetail(node, url);
+            }
+          } catch (err) {
+            childUl.innerHTML = "";
+            const errEl = document.createElement("li");
+            errEl.className = "error";
+            errEl.textContent = `Error: ${err.message}`;
+            childUl.appendChild(errEl);
+          }
+        }
+
+        expanded = !expanded;
+        row.classList.toggle("expanded", expanded);
+        animateToggle(childUl, expanded);
+      });
+
+      node._refresh = async () => {
+        loaded = false;
+        childUl.innerHTML = "";
+        if (!expanded) row.click();
+        else {
+          row.click();
+          setTimeout(() => row.click(), 250);
+        }
+      };
+
+      li.appendChild(row);
+      li.appendChild(childUl);
+      return li;
+    }
+
+    function animateToggle(ul, expanded) {
+      if (expanded) {
+        ul.style.display = "block";
+        ul.style.height = "auto";
+        const targetHeight = ul.scrollHeight;
+        ul.style.height = "0px";
+        anime({
+          targets: ul,
+          height: [0, targetHeight],
+          opacity: [0, 1],
+          duration: 220,
+          easing: "easeOutQuad",
+          complete: () => { ul.style.height = "auto"; },
+        });
+      } else {
+        const startHeight = ul.scrollHeight;
+        ul.style.height = startHeight + "px";
+        anime({
+          targets: ul,
+          height: [startHeight, 0],
+          opacity: [1, 0],
+          duration: 180,
+          easing: "easeInQuad",
+          complete: () => { ul.style.display = "none"; },
+        });
+      }
+    }
+
+    function selectNode(rowEl, node, apiUrl) {
+      document.querySelectorAll(".tree-node.selected").forEach((el) =>
+        el.classList.remove("selected")
+      );
+      rowEl.classList.add("selected");
+      selected = { node, apiUrl, rowEl };
+      showDetail(node, apiUrl);
+    }
+
+    async function showDetail(node, apiUrl) {
+      const cbLink = node._id
+        ? `<a href="${CB_ITEM_URL(node._id)}" target="_blank">${CB_ITEM_URL(node._id)}</a>`
+        : "<span class='muted'>(no item id)</span>";
+
+      detailEl.innerHTML = `
+        <h2>${escapeHtml(node._name)}</h2>
+        <dl>
+          <dt>ID</dt><dd>${escapeHtml(String(node._id))}</dd>
+          <dt>Type</dt><dd>${escapeHtml(node._kind)}</dd>
+          <dt>API URL</dt><dd>${apiUrl ? escapeHtml(apiUrl) : "<span class='muted'>(not loaded yet)</span>"}</dd>
+          <dt>Codebeamer</dt><dd>${cbLink}</dd>
+        </dl>
+        <div id="fieldsBox"></div>
+      `;
+
+      if (node._kind === "item" || node._kind === "testcase") {
+        const box = document.getElementById("fieldsBox");
+        box.innerHTML = `<p class="muted">Loading fields...</p>`;
+        try {
+          const { url, data } = await api.getItemFields(node._id);
+          box.innerHTML = `
+            <h3>Fields</h3>
+            <p class="muted">${escapeHtml(url)}</p>
+            <pre>${escapeHtml(JSON.stringify(data, null, 2))}</pre>
+          `;
+        } catch (err) {
+          box.innerHTML = `<p class="error">Error loading fields: ${escapeHtml(err.message)}</p>`;
+        }
+      }
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+      }[c]));
+    }
+
+    async function loadProjects() {
+      treeEl.innerHTML = `<li class="loading">Loading projects...</li>`;
+      try {
+        const { data } = await api.listProjects();
+        treeEl.innerHTML = "";
+        const list = Array.isArray(data) ? data : data.projects || [];
+        if (list.length === 0) {
+          treeEl.innerHTML = `<li class="loading">(no projects)</li>`;
+          return;
+        }
+        for (const raw of list) {
+          const node = {
+            _id: pickId(raw),
+            _name: pickName(raw),
+            _kind: "project",
+            _raw: raw,
+          };
+          treeEl.appendChild(renderNode(node));
+        }
+      } catch (err) {
+        treeEl.innerHTML = `<li class="error">Error loading projects: ${escapeHtml(err.message)}</li>`;
+      }
+    }
+
+    /* ========== Modal ========== */
+    const modal = document.getElementById("modal");
+    const modalTitle = document.getElementById("modalTitle");
+    const modalBody = document.getElementById("modalBody");
+    const modalSubmit = document.getElementById("modalSubmit");
+
+    function openModal(title, bodyHtml, onSubmit) {
+      modalTitle.textContent = title;
+      modalBody.innerHTML = bodyHtml;
+      modal.classList.remove("hidden");
+      modalSubmit.onclick = async () => {
+        try { await onSubmit(); } finally { closeModal(); }
+      };
+    }
+
+    function closeModal() { modal.classList.add("hidden"); }
+    document.getElementById("modalClose").onclick = closeModal;
+    document.getElementById("modalCancel").onclick = closeModal;
+
+    /* ========== Toolbar ========== */
+    document.getElementById("btnCreateTestcase").onclick = () => {
+      if (!selected) { alert("Please select a parent node in the tree first."); return; }
+      const parentId = selected.node._id;
+      openModal(
+        "Create Testcase",
+        `
+          <label>Parent ID
+            <input id="f_parent" value="${escapeHtml(String(parentId))}" readonly />
+          </label>
+          <label>Testcase name
+            <input id="f_name" placeholder="My new testcase" />
+          </label>
+          <label>Description
+            <textarea id="f_desc" placeholder="Description"></textarea>
+          </label>
+        `,
+        async () => {
+          const name = document.getElementById("f_name").value.trim();
+          const desc = document.getElementById("f_desc").value.trim();
+          if (!name) { alert("Name required"); return; }
+          try {
+            const result = await createTestcase(parentId, name, desc);
+            const itemId = result.id || result.itemId;
+            const itemName = result.name;
+            alert(`Testcase created successfully!\nID: ${itemId}\nName: ${itemName}`);
+            if (selected.node._refresh) {
+              await selected.node._refresh();
+            }
+          } catch (err) {
+            alert(`Error creating testcase: ${err.message}`);
+          }
+        }
+      );
+    };
+
+    document.getElementById("btnRefresh").onclick = async () => {
+      if (!selected) { alert("Please select a node first."); return; }
+      if (typeof selected.node._refresh === "function") {
+        await selected.node._refresh();
+      }
+    };
+
+    loadProjects();
+  </script>
 </body>
 </html>

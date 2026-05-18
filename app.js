@@ -2,7 +2,8 @@
    Codebeamer Test Manager - simple tree UI
    ========================================================= */
 
-const API_BASE = "http://192.128.10.230:11000";
+// Point to the test-manager backend (running on port 8082)
+const API_BASE = "http://localhost:8082";
 const CB_ITEM_URL = (id) => `http://cb.corp.bos-semi.com/cb/issue/${id}`;
 
 const ICONS = {
@@ -26,30 +27,49 @@ async function apiGet(path) {
   return { url, data };
 }
 
+async function apiPost(path, payload) {
+  const url = `${API_BASE}${path}`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const error = await res.text();
+    throw new Error(`${res.status}: ${error}`);
+  }
+  const data = await res.json();
+  return { url, data };
+}
+
 const api = {
   listProjects: () => apiGet(`/cb/projects`),
   listTrackers: (projectId) => apiGet(`/cb/projects/list-trackers?project_id=${projectId}`),
   listTrackerChildren: (trackerId) => apiGet(`/cb/trackers/list-children?tracker_id=${trackerId}`),
   listItemChildren: (itemId) => apiGet(`/cb/items/children-items-in-item?item_id=${itemId}`),
   getItemFields: (itemId) => apiGet(`/cb/items/fields?item_id=${itemId}`),
+  createTrackerItem: (trackerId, name, description, parentItemId) =>
+    apiPost(`/cc/trackers/create/items-in-tracker`, {
+      tracker_id: trackerId,
+      test_set_name: name,
+      test_set_description: description,
+      parent_item_id: parentItemId,
+    }),
 };
 
 // -----------------------------
-// Stub APIs (to be implemented later)
+// API implementation (no longer stubs)
 // -----------------------------
 async function createTestcase(parentId, testcaseName, description) {
-  // TODO: call backend API to create testcase
-  console.log("TODO create testcase", { parentId, testcaseName, description });
-}
-
-async function linkTestcaseToParent(parentId, testcaseId) {
-  // TODO: call backend API to link testcase under parent
-  console.log("TODO link testcase", { parentId, testcaseId });
+  // Use test-manager backend API - no credentials needed for tree operations
+  const trackerId = 238730; // testcase tracker ID from config
+  const result = await api.createTrackerItem(trackerId, testcaseName, description, parentId);
+  return result.data;
 }
 
 async function updateTestSteps(testcaseId, steps) {
-  // TODO: call backend API to create/update testcase steps
-  console.log("TODO update test steps", { testcaseId, steps });
+  // This would require implementing additional endpoints in test-manager
+  throw new Error("Test step editing not yet available via tree interface");
 }
 
 // -----------------------------
@@ -356,10 +376,18 @@ document.getElementById("btnCreateTestcase").onclick = () => {
       const name = document.getElementById("f_name").value.trim();
       const desc = document.getElementById("f_desc").value.trim();
       if (!name) { alert("Name required"); return; }
-      await createTestcase(parentId, name, desc);
-      // also demonstrate the link placeholder
-      await linkTestcaseToParent(parentId, "<new-testcase-id>");
-      alert("createTestcase() is a TODO placeholder. See console.");
+      try {
+        const result = await createTestcase(parentId, name, desc);
+        const itemId = result.id || result.itemId;
+        const itemName = result.name;
+        alert(`Testcase created successfully!\nID: ${itemId}\nName: ${itemName}`);
+        // Refresh the parent node to show the new testcase
+        if (selected.node._refresh) {
+          await selected.node._refresh();
+        }
+      } catch (err) {
+        alert(`Error creating testcase: ${err.message}`);
+      }
     }
   );
 };
@@ -370,21 +398,7 @@ document.getElementById("btnEditSteps").onclick = () => {
     return;
   }
   const tcId = selected.node._id;
-  openModal(
-    "Edit Test Steps",
-    `
-      <p class="muted">Testcase ID: ${escapeHtml(String(tcId))}</p>
-      <label>Steps (one per line)
-        <textarea id="f_steps" placeholder="Step 1&#10;Step 2"></textarea>
-      </label>
-    `,
-    async () => {
-      const raw = document.getElementById("f_steps").value;
-      const steps = raw.split("\n").map((s) => s.trim()).filter(Boolean);
-      await updateTestSteps(tcId, steps);
-      alert("updateTestSteps() is a TODO placeholder. See console.");
-    }
-  );
+  alert("Test step editing via the tree UI is not yet available.\nPlease use the Codebeamer web interface to edit test steps.");
 };
 
 document.getElementById("btnRefresh").onclick = async () => {
