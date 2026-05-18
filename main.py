@@ -24,6 +24,90 @@ app = FastAPI(title="Codebeamer Test Manager Creator UI")
 # Test-Manager Backend URL (where Codebeamer API endpoints are)
 TEST_MANAGER_BASE = "http://localhost:8082"
 
+# Use mock data if Codebeamer is unreachable (for UI testing)
+USE_MOCK_DATA = os.environ.get("USE_MOCK_DATA", "true").lower() == "true"
+
+# Mock data for UI testing when Codebeamer is unavailable
+MOCK_PROJECTS = {
+    "projects": [
+        {
+            "id": 1,
+            "name": "Project Alpha",
+            "description": "Test project 1",
+            "version": 1
+        },
+        {
+            "id": 2,
+            "name": "Project Beta",
+            "description": "Test project 2",
+            "version": 1
+        }
+    ]
+}
+
+MOCK_TRACKERS = {
+    "trackers": [
+        {
+            "id": 101,
+            "name": "QA Testing",
+            "trackerType": "Test Case Tracker",
+            "projectId": 1
+        },
+        {
+            "id": 102,
+            "name": "Bug Tracking",
+            "trackerType": "Bug Tracker",
+            "projectId": 1
+        }
+    ]
+}
+
+MOCK_ITEMS = {
+    "items": [
+        {
+            "id": 1001,
+            "name": "Test Suite 1",
+            "itemType": "Test Set",
+            "trackerId": 101
+        },
+        {
+            "id": 1002,
+            "name": "Test Case A",
+            "itemType": "Test Case",
+            "trackerId": 101
+        }
+    ]
+}
+
+MOCK_CHILDREN = {
+    "children": [
+        {
+            "id": 10001,
+            "name": "Step 1: Setup",
+            "itemType": "Test Case",
+            "parentId": 1001
+        },
+        {
+            "id": 10002,
+            "name": "Step 2: Execute",
+            "itemType": "Test Case",
+            "parentId": 1001
+        }
+    ]
+}
+
+MOCK_FIELDS = {
+    "fields": {
+        "id": "1001",
+        "name": "Test Suite 1",
+        "description": "Example test suite",
+        "priority": "High",
+        "status": "In Progress",
+        "assignee": "Engineer",
+        "created": "2025-01-15"
+    }
+}
+
 # ========== Frontend ========== 
 @app.get("/")
 def index():
@@ -42,7 +126,13 @@ async def list_projects():
             response.raise_for_status()
             return response.json()
         except httpx.HTTPError as e:
-            raise HTTPException(status_code=502, detail=f"Failed to fetch projects: {str(e)}")
+            if USE_MOCK_DATA:
+                print(f"⚠️  Using mock data (Codebeamer unavailable): {str(e)}")
+                return MOCK_PROJECTS
+            raise HTTPException(
+                status_code=502,
+                detail=f"Codebeamer unavailable: {str(e)}. Set USE_MOCK_DATA=true to use test data."
+            )
 
 
 @app.get("/api/trackers")
@@ -58,6 +148,9 @@ async def list_trackers(project_id: int):
             response.raise_for_status()
             return response.json()
         except httpx.HTTPError as e:
+            if USE_MOCK_DATA:
+                print(f"⚠️  Using mock trackers data")
+                return MOCK_TRACKERS
             raise HTTPException(status_code=502, detail=f"Failed to fetch trackers: {str(e)}")
 
 
@@ -74,6 +167,9 @@ async def list_tracker_items(tracker_id: int):
             response.raise_for_status()
             return response.json()
         except httpx.HTTPError as e:
+            if USE_MOCK_DATA:
+                print(f"⚠️  Using mock tracker items data")
+                return MOCK_ITEMS
             raise HTTPException(status_code=502, detail=f"Failed to fetch tracker items: {str(e)}")
 
 
@@ -90,6 +186,9 @@ async def list_item_children(item_id: int):
             response.raise_for_status()
             return response.json()
         except httpx.HTTPError as e:
+            if USE_MOCK_DATA:
+                print(f"⚠️  Using mock item children data")
+                return MOCK_CHILDREN
             raise HTTPException(status_code=502, detail=f"Failed to fetch item children: {str(e)}")
 
 
@@ -106,6 +205,9 @@ async def get_item_fields(item_id: int):
             response.raise_for_status()
             return response.json()
         except httpx.HTTPError as e:
+            if USE_MOCK_DATA:
+                print(f"⚠️  Using mock item fields data")
+                return MOCK_FIELDS
             raise HTTPException(status_code=502, detail=f"Failed to fetch item fields: {str(e)}")
 
 
