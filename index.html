@@ -8,44 +8,30 @@
 </head>
 <body>
   <header class="topbar">
-    <h1>Codebeamer Test Manager</h1>
-    <div class="actions">
-      <button id="btnCreateTestcase">+ Create Testcase</button>
-      <button id="btnEditSteps">Edit Test Steps</button>
-      <button id="btnRefresh">Refresh Children</button>
+    <div class="topbar-brand">🧪 Codebeamer Test Manager</div>
+    <div class="topbar-creds">
+      <input id="inputUser" class="cred-input" type="text" placeholder="CB Username" autocomplete="username" />
+      <input id="inputPass" class="cred-input" type="password" placeholder="CB Password" autocomplete="current-password" />
     </div>
   </header>
 
   <main class="layout">
     <!-- Left: tree -->
-    <section class="panel tree-panel">
-      <div class="panel-header">Projects</div>
+    <aside class="sidebar">
+      <div class="panel-header">
+        Projects
+        <button id="btnRefreshTree" class="icon-btn" title="Reload projects">↻</button>
+      </div>
       <ul id="tree" class="tree"></ul>
-    </section>
+    </aside>
 
-    <!-- Right: details -->
-    <section class="panel detail-panel">
-      <div class="panel-header">Details</div>
-      <div id="detail" class="detail">
-        <p class="muted">Select a node from the tree to see details.</p>
+    <!-- Right: workspace -->
+    <section class="workspace" id="workspace">
+      <div class="workspace-empty">
+        <p>Select a node in the tree to see details,<br />or click <strong>Create Testcase</strong> on a parent node.</p>
       </div>
     </section>
   </main>
-
-  <!-- Simple modal -->
-  <div id="modal" class="modal hidden">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3 id="modalTitle">Modal</h3>
-        <button class="close-btn" id="modalClose">&times;</button>
-      </div>
-      <div class="modal-body" id="modalBody"></div>
-      <div class="modal-footer">
-        <button id="modalCancel">Cancel</button>
-        <button id="modalSubmit" class="primary">Submit</button>
-      </div>
-    </div>
-  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/animejs@3.2.1/lib/anime.min.js"></script>
   <script src="app.js"></script>

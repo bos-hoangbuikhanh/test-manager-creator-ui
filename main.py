@@ -4,6 +4,7 @@ from typing import List, Optional
 
 import requests
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -138,6 +139,14 @@ def update_testcase_steps(
 # FastAPI app
 # --------------------------------------------------------------------------- #
 app = FastAPI(title="Codebeamer Testcase Creator")
+
+# Allow the standalone index.html (file:// or any origin) to call this API.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["POST", "GET", "OPTIONS"],
+    allow_headers=["*"],
+)
 
 
 class TestStep(BaseModel):
